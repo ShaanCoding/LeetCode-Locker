@@ -8,7 +8,10 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import axios from 'axios';
+import { app, ipcMain, shell } from 'electron';
+const { BrowserWindow } = require('electron-acrylic-window');
+
 import log from 'electron-log';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
@@ -71,8 +74,14 @@ const createWindow = async () => {
 
   mainWindow = new BrowserWindow({
     show: false,
-    width: 1024,
-    height: 728,
+    kiosk: true,
+    transparent: true,
+    frame: false,
+    vibrancy: {
+      theme: 'dark', // (default) or 'dark' or '#rrggbbaa'
+      effect: 'blur', // (default) or 'blur'
+      disableOnBlur: true, // (default)
+    },
     icon: getAssetPath('icon.png'),
     webPreferences: {
       preload: app.isPackaged
@@ -87,11 +96,11 @@ const createWindow = async () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
-    if (process.env.START_MINIMIZED) {
-      mainWindow.minimize();
-    } else {
-      mainWindow.show();
-    }
+    // if (process.env.START_MINIMIZED) {
+    //   mainWindow.minimize();
+    // } else {
+    //   mainWindow.show();
+    // }
   });
 
   mainWindow.on('closed', () => {
@@ -124,14 +133,56 @@ app.on('window-all-closed', () => {
   }
 });
 
-app
-  .whenReady()
-  .then(() => {
+(async () => {
+  try {
+    await app.whenReady();
     createWindow();
-    app.on('activate', () => {
-      // On macOS it's common to re-create a window in the app when the
-      // dock icon is clicked and there are no other windows open.
-      if (mainWindow === null) createWindow();
-    });
-  })
-  .catch(console.log);
+
+    let request = await axios.get(
+      'https://leetcode-stats-api.herokuapp.com/ShaanCoding'
+    );
+    let data = request.data;
+
+    // If API works, we check if user has done their daily leetcode challenge
+    if (data.status == 'success') {
+      if (
+        (await mainWindow?.webContents.executeJavaScript(
+          'localStorage.length'
+        )) == 0
+      ) {
+        await mainWindow?.webContents.executeJavaScript(
+          `localStorage.setItem('totalSolved', '${data.totalSolved}')`
+        );
+      }
+
+      let oldTotalSolved = await mainWindow?.webContents.executeJavaScript(
+        "localStorage.getItem('totalSolved')"
+      );
+      let totalSolved = data.totalSolved;
+
+      // If this is done, the user has done their daily leetcode question :D
+      if (totalSolved > oldTotalSolved) {
+        await mainWindow?.webContents.executeJavaScript(
+          `localStorage.setItem('totalSolved', '${totalSolved}')`
+        );
+        app.quit();
+      } else {
+        // Else the user must do their daily leetcode question
+        mainWindow.show();
+      }
+
+      console.log(oldTotalSolved);
+    } else {
+      // Means it's not working and close app
+      app.quit();
+    }
+  } catch (ex) {
+    console.log(ex);
+  }
+
+  app.on('activate', () => {
+    // On macOS it's common to re-create a window in the app when the
+    // dock icon is clicked and there are no other windows open.
+    if (mainWindow === null) createWindow();
+  });
+})();
