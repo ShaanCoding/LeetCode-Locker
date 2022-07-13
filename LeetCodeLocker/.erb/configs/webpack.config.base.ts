@@ -5,8 +5,10 @@
 import webpack from 'webpack';
 import webpackPaths from './webpack.paths';
 import { dependencies as externals } from '../../release/app/package.json';
+import WebpackConfig from './webpack.config';
 
-const configuration: webpack.Configuration = {
+// https://github.com/electron-react-boilerplate/electron-react-boilerplate/pull/3052
+export default <WebpackConfig>{
   externals: [...Object.keys(externals || {})],
 
   stats: 'errors-only',
@@ -49,5 +51,3 @@ const configuration: webpack.Configuration = {
     }),
   ],
 };
-
-export default configuration;
